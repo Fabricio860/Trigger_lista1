@@ -1,0 +1,110 @@
+    1) TESTE DO TRIGGER:
+--    A) EXCLUIR UM REGISTRO DA TABELA AUTOR E, EM SEGUIDA, VISUALIZAR CONTEÚDO DA TABELA DE AUDITORIA
+        select * from autor;
+        select * from autoria;
+        DESCRIBE autoria;
+        DELETE FROM autoria WHERE cod_autor = 4;
+        DELETE FROM autor WHERE codigo = 4; 
+        select * from auditoria;
+
+--    B) DESABILITAR O TRIGGER TR_AUTOR_AUDIT01
+        ALTER TRIGGER TR_AUTOR_AUDIT01 disable; -- ENABLE(habilitar)
+
+--    C) EXCLUIR MAIS UM REGISTRO DA TABELA AUTOR. VISUALIZAR CONTEÚDO DA TABELA DE AUDITORIA EM SEGUIDA.
+       DELETE FROM autoria WHERE cod_autor = 3;
+        DELETE FROM autor WHERE codigo = 3;
+        select * from auditoria;
+--    D) HABILITAR NOVAMENTE O TRIGGER TR_AUTOR_AUDIT01.
+        ALTER TRIGGER TR_AUTOR_AUDIT01 enable;
+
+-- 2) CRIAR TRIGGERS PARA:
+--    A) NÃO PERMITIR DATA DE NASCIMENTO DO AUTOR MAIOR QUE A DATA ATUAL
+        CREATE OR REPLACE TRIGGER TR_AUTOR_AUDIT01
+        AFTER update or insert 
+        ON AUTOR
+        REFERENCING OLD AS OLD NEW AS NEW
+        FOR EACH ROW
+        BEGIN        
+       if(:NEW.data_nascimento > sysdate) then
+       raise_application_error(-20001,'Date de nascimento inválido' );
+       end if; 
+    end;       
+       INSERT INTO AUTOR (CODIGO, NOME, DATA_NASCIMENTO, CPF)
+       VALUES( 3,'Bricio', to_date('20/05/2020', 'dd/mm/yyyy'), 12345678901);
+
+   commit;
+
+    SELECT     *    FROM autor;         
+    
+--    B) COMPLETAR AUTOMATICAMENTE OS CAMPOS DATA E USUARIO NO CADASTRO DA REVISTA
+    CREATE OR REPLACE TRIGGER TR_REVISTA_AUTO
+    BEFORE INSERT ON REVISTA
+    FOR EACH ROW
+    BEGIN
+    :NEW.DATA_CADASTRO := SYSDATE;
+    :NEW.USUARIO_CADASTRO := USER;
+    END;
+
+    INSERT INTO REVISTA (EDICAO, DATA_PUBLICACAO)
+    VALUES (8, to_date('11/02/2023', 'dd/mm/yyyy'));
+
+    select * from revista;
+--    C) AUDITORIA DE INSERCAO, DELEÇÃO E ATUALIZAÇÃO NA TABELA DE ARTIGO
+
+    CREATE OR REPLACE TRIGGER TR_ARTIGO_AUTOMACAO 
+    AFTER INSERT OR UPDATE OR DELETE ON ARTIGO 
+    FOR EACH ROW 
+    
+    DECLARE 
+    OPERACAO CHAR(1);
+    ident number(10);
+    
+    BEGIN 
+
+    select max(codigo) into ident from auditoria; 
+    ident := ident + 1;
+
+    IF INSERTING THEN 
+        OPERACAO := 'I';
+    ELSIF UPDATING THEN 
+        OPERACAO := 'U';
+    ELSIF DELETING THEN
+        OPERACAO := 'D';
+    END IF;
+
+    INSERT INTO AUDITORIA (CODIGO, TABELA, TIPO_OPERACAO, CHAVE_REGISTRO, DT_HR_OPERACAO, usuario)
+    VALUES(ident, 'ARTIGO', OPERACAO, CASE WHEN operacao = 'D' THEN :OLD.CODIGO ELSE :NEW.CODIGO END , SYSDATE, USER);
+    
+    END;
+
+    SELECT * FROM ARTIGO;
+
+    INSERT INTO ARTIGO VALUES (5, 'ENTREI', 'E VOU SAIR', SYSDATE);
+
+    UPDATE artigo SET TEXTO ='ESTOU SAINDO' WHERE CODIGO = 5;
+
+    DELETE FROM ARTIGO WHERE CODIGO = 5;
+
+    SELECT * FROM AUDITORIA;
+ 
+--    D) GERAR CÓDIGOS DE AUTOR AUTOMATICAMENTE (usar sequence)
+
+    SELECT * FROM AUTOR;
+
+    CREATE SEQUENCE  S_AUTOAUTOR
+    MINVALUE 1 
+    MAXVALUE 99999999 
+    INCREMENT BY 1 START WITH 5
+    NOCACHE;
+
+    CREATE OR REPLACE TRIGGER TR_AUTOR_AUTO
+    BEFORE INSERT ON AUTOR
+    FOR EACH ROW
+
+    BEGIN
+    SELECT S_AUTOAUTOR.NEXTVAL INTO :NEW.CODIGO FROM DUAL;
+    END;
+
+    select * from autor;
+    INSERT INTO AUTOR (NOME,DATA_NASCIMENTO,CPF)
+    VALUES ('Renata', TO_DATE('21/01/1985','DD/MM/YYYY'),12312312312);
